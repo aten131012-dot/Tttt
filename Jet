@@ -1,0 +1,1877 @@
+-- NEXORA | เจ็ตขับไล่ V3 — ไฟล์ 1/5 (UI + เอฟเฟกต์เครื่องบิน)
+local Players = game:GetService("Players")
+local TS = game:GetService("TweenService")
+local lp = Players.LocalPlayer
+local env = (getgenv and getgenv()) or _G
+
+-- ล้างของเก่าถ้ารันซ้ำ
+if env.NEXORA_JET then
+	pcall(function()
+		local o = env.NEXORA_JET
+		if o.fullCleanup then o.fullCleanup() elseif o.cleanup then o.cleanup() end
+	end)
+	pcall(function() env.NEXORA_JET.gui:Destroy() end)
+end
+
+local gui = Instance.new("ScreenGui")
+gui.Name = "NEXORA_Jet"
+gui.ResetOnSpawn = false
+local ok = pcall(function() gui.Parent = (gethui and gethui()) or game:GetService("CoreGui") end)
+if not ok or not gui.Parent then gui.Parent = lp:WaitForChild("PlayerGui") end
+
+local INK = Color3.fromRGB(14, 16, 26)
+local WHITE = Color3.fromRGB(235, 240, 255)
+local PURPLE = Color3.fromRGB(180, 90, 255)
+local RED = Color3.fromRGB(230, 40, 55)
+
+local function styleBtn(b, accent, bar)
+	b.AutoButtonColor = false
+	b.BorderSizePixel = 0
+	b.BackgroundColor3 = INK
+	b.BackgroundTransparency = 0.2
+	b.TextColor3 = WHITE
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 6)
+	corner.Parent = b
+
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = accent
+	stroke.Thickness = 1.8
+	stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	stroke.Parent = b
+
+	if bar ~= false then
+		local f = Instance.new("Frame")
+		f.Name = "Bar"
+		f.Size = UDim2.new(0, 4, 0.56, 0)
+		f.Position = UDim2.new(0, 8, 0.22, 0)
+		f.BackgroundColor3 = accent
+		f.BorderSizePixel = 0
+		f.Parent = b
+		Instance.new("UICorner", f).CornerRadius = UDim.new(1, 0)
+	end
+
+	local dark = accent:Lerp(Color3.new(0, 0, 0), 0.6)
+	local function isPress(i)
+		return i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch
+	end
+	b.InputBegan:Connect(function(i)
+		if isPress(i) then
+			TS:Create(b, TweenInfo.new(0.08), {BackgroundColor3 = dark, BackgroundTransparency = 0.05}):Play()
+			TS:Create(stroke, TweenInfo.new(0.08), {Thickness = 3.2}):Play()
+		end
+	end)
+	b.InputEnded:Connect(function(i)
+		if isPress(i) then
+			TS:Create(b, TweenInfo.new(0.15), {BackgroundColor3 = INK, BackgroundTransparency = 0.2}):Play()
+			TS:Create(stroke, TweenInfo.new(0.15), {Thickness = 1.8}):Play()
+		end
+	end)
+	return b
+end
+
+local function newBtn(text, pos, size, accent, anchor, parent)
+	local b = Instance.new("TextButton")
+	b.Text = text
+	b.Position = pos
+	b.Size = size
+	b.AnchorPoint = anchor or Vector2.new(0, 0)
+	b.Font = Enum.Font.SourceSansBold
+	b.TextSize = 22
+	b.Parent = parent or gui
+	return styleBtn(b, accent, true)
+end
+
+local callBtn = newBtn("เรียกเครื่องบิน", UDim2.new(1, -10, 0.5, -30), UDim2.fromOffset(160, 46), Color3.fromRGB(0, 200, 255), Vector2.new(1, 0.5))
+local boardBtn = newBtn("ขึ้นขี่", UDim2.new(1, -10, 0.5, 30), UDim2.fromOffset(160, 46), Color3.fromRGB(70, 255, 170), Vector2.new(1, 0.5))
+boardBtn.Visible = false
+
+local ARROW = Color3.fromRGB(110, 220, 255)
+
+local function makeButton(name, text, x, y)
+	local b = Instance.new("TextButton")
+	b.Name = name
+	b.Size = UDim2.fromOffset(85, 75)
+	b.Position = UDim2.new(0, x, 0.5, y)
+	b.Text = text
+	b.TextSize = 30
+	b.Font = Enum.Font.GothamBlack
+	b.Visible = false
+	b.Parent = gui
+	return styleBtn(b, ARROW, false)
+end
+
+local up = makeButton("Up", "▲", 10, -60)
+local down = makeButton("Down", "▼", 10, 22)
+
+local rightPanel = Instance.new("Frame")
+rightPanel.Name = "TurnControls"
+rightPanel.Size = UDim2.fromOffset(180, 75)
+rightPanel.Position = UDim2.new(1, -195, 0.5, -35)
+rightPanel.BackgroundTransparency = 1
+rightPanel.Visible = false
+rightPanel.Parent = gui
+
+local function makeRightButton(name, text, x)
+	local b = Instance.new("TextButton")
+	b.Name = name
+	b.Size = UDim2.fromOffset(85, 75)
+	b.Position = UDim2.fromOffset(x, 0)
+	b.Text = text
+	b.TextSize = 30
+	b.Font = Enum.Font.GothamBlack
+	b.Parent = rightPanel
+	return styleBtn(b, ARROW, false)
+end
+
+local left = makeRightButton("Left", "◀", 0)
+local right = makeRightButton("Right", "▶", 95)
+
+local takeoffBtn = newBtn("บินขึ้น", UDim2.new(1, -195, 0.5, -95), UDim2.fromOffset(180, 50), PURPLE)
+takeoffBtn.TextSize = 24
+takeoffBtn.Visible = false
+
+-- สกิล: กลางจอด้านบน (กริด 4 x 3)
+local skills = Instance.new("Frame")
+skills.Name = "Skills"
+skills.AnchorPoint = Vector2.new(0.5, 0)
+skills.Position = UDim2.new(0.5, 0, 0, 6)
+skills.Size = UDim2.fromOffset(424, 134)
+skills.BackgroundTransparency = 1
+skills.Visible = false
+skills.Parent = gui
+local grid = Instance.new("UIGridLayout")
+grid.CellSize = UDim2.fromOffset(100, 40)
+grid.CellPadding = UDim2.fromOffset(8, 6)
+grid.HorizontalAlignment = Enum.HorizontalAlignment.Center
+grid.SortOrder = Enum.SortOrder.LayoutOrder
+grid.FillDirectionMaxCells = 4
+grid.Parent = skills
+
+local function skillBtn(text, accent, order)
+	local b = Instance.new("TextButton")
+	b.Text = text
+	b.Font = Enum.Font.SourceSansBold
+	b.TextScaled = true
+	b.LayoutOrder = order
+	b.Parent = skills
+	local pad = Instance.new("UIPadding")
+	pad.PaddingLeft = UDim.new(0, 6)
+	pad.PaddingRight = UDim.new(0, 6)
+	pad.PaddingTop = UDim.new(0, 7)
+	pad.PaddingBottom = UDim.new(0, 7)
+	pad.Parent = b
+	return styleBtn(b, accent, false)
+end
+local missileBtn = skillBtn("ยิงมิสไซล์", Color3.fromRGB(255, 110, 70), 1)
+local salvoBtn = skillBtn("ยิงรัว", Color3.fromRGB(255, 70, 110), 2)
+local boostBtn = skillBtn("เร่งความเร็ว", PURPLE, 3)
+local shieldBtn = skillBtn("โล่", Color3.fromRGB(80, 200, 255), 4)
+local rollBtn = skillBtn("กลิ้งตัว", Color3.fromRGB(255, 220, 90), 5)
+local novaBtn = skillBtn("คลื่นช็อก", Color3.fromRGB(90, 255, 200), 6)
+local cloakBtn = skillBtn("ซ่อนตัว", Color3.fromRGB(150, 160, 255), 7)
+local laserBtn = skillBtn("เลเซอร์", Color3.fromRGB(255, 60, 100), 8)
+local bombBtn = skillBtn("ทิ้งระเบิด", Color3.fromRGB(255, 160, 60), 9)
+local flareBtn = skillBtn("แฟลร์", Color3.fromRGB(255, 235, 140), 10)
+local rainbowBtn = skillBtn("ควันสี", Color3.fromRGB(255, 120, 220), 11)
+local landBtn = skillBtn("ลงจากเครื่อง", Color3.fromRGB(200, 210, 230), 12)
+
+local function setUI(state)
+	local r = (state == "riding")
+	callBtn.Visible = (state == "idle")
+	boardBtn.Visible = (state == "landed")
+	skills.Visible = r
+	up.Visible, down.Visible, rightPanel.Visible = r, r, r
+	takeoffBtn.Visible = r
+end
+
+local inp = {up = false, down = false, left = false, right = false}
+local function hold(btn, key)
+	btn.InputBegan:Connect(function(i)
+		if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+			inp[key] = true
+		end
+	end)
+	btn.InputEnded:Connect(function(i)
+		if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+			inp[key] = false
+		end
+	end)
+end
+hold(up, "up") hold(down, "down") hold(left, "left") hold(right, "right")
+
+-- ===== เอฟเฟกต์เครื่องบิน =====
+local ORANGE_SEQ = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 245, 170)),
+	ColorSequenceKeypoint.new(0.4, Color3.fromRGB(255, 140, 30)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(200, 40, 10)),
+})
+local PURPLE_SEQ = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(245, 225, 255)),
+	ColorSequenceKeypoint.new(0.35, Color3.fromRGB(180, 90, 255)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(80, 20, 160)),
+})
+local NORM_SIZE = NumberSequence.new({NumberSequenceKeypoint.new(0, 1.8), NumberSequenceKeypoint.new(1, 0.2)})
+local BIG_SIZE = NumberSequence.new({NumberSequenceKeypoint.new(0, 2.8), NumberSequenceKeypoint.new(1, 0.3)})
+local FLAME_ORANGE = Color3.fromRGB(255, 140, 40)
+local CORE_ORANGE = Color3.fromRGB(255, 245, 200)
+local CORE_PURPLE = Color3.fromRGB(245, 225, 255)
+
+-- ไฟท้าย afterburner (2 เครื่องยนต์)
+local function setFire(m, rate, boost)
+	if not m then return end
+	local exf = m:FindFirstChild("Exhausts")
+	if not exf then return end
+	boost = boost and true or false
+
+	if m:GetAttribute("Boost") ~= boost then
+		m:SetAttribute("Boost", boost)
+		local hl = m:FindFirstChild("BoostHL")
+		if hl then hl.Enabled = boost end
+		for _, p in ipairs(m:GetDescendants()) do
+			if p:IsA("BasePart") and p:GetAttribute("Accent") then
+				p.Color = boost and PURPLE or RED
+			end
+		end
+		for _, ex in ipairs(exf:GetChildren()) do
+			local f = ex:FindFirstChild("FireFx")
+			local l = ex:FindFirstChildOfClass("PointLight")
+			if f then
+				f.Color = boost and PURPLE_SEQ or ORANGE_SEQ
+				f.Size = boost and BIG_SIZE or NORM_SIZE
+				f.Speed = boost and NumberRange.new(40, 55) or NumberRange.new(20, 30)
+			end
+			if l then l.Color = boost and PURPLE or Color3.fromRGB(255, 150, 60) end
+		end
+	end
+
+	local len = 0
+	if rate > 0 then len = math.clamp(2.5 + rate * 0.055, 0, 18) end
+	local flick = 0.88 + math.random() * 0.24
+
+	for _, ex in ipairs(exf:GetChildren()) do
+		local f = ex:FindFirstChild("FireFx")
+		local s = ex:FindFirstChild("SmokeFx")
+		local l = ex:FindFirstChildOfClass("PointLight")
+		local fl = ex:FindFirstChild("Flame")
+		local core = ex:FindFirstChild("FlameCore")
+		if f then f.Rate = rate * 0.5 end
+		if s then s.Rate = boost and 0 or rate * 0.18 end
+		if l then l.Brightness = (rate > 0) and (boost and 5 or 2) or 0 end
+		if fl and core then
+			if len > 0 then
+				local L = len * flick
+				fl.Size = Vector3.new(L, 1.5, 1.5)
+				fl.CFrame = ex.CFrame * CFrame.new(0, 0, L / 2) * CFrame.Angles(0, math.rad(90), 0)
+				fl.Color = boost and PURPLE or FLAME_ORANGE
+				fl.Transparency = 0.35
+				local cl = L * 0.6
+				core.Size = Vector3.new(cl, 0.7, 0.7)
+				core.CFrame = ex.CFrame * CFrame.new(0, 0, cl / 2) * CFrame.Angles(0, math.rad(90), 0)
+				core.Color = boost and CORE_PURPLE or CORE_ORANGE
+				core.Transparency = 0.1
+			else
+				fl.Transparency = 1
+				core.Transparency = 1
+			end
+		end
+	end
+end
+
+local function setWheels(m, out)
+	if not m then return end
+	local wf = m:FindFirstChild("Wheels")
+	if not wf then return end
+	for _, p in ipairs(wf:GetChildren()) do
+		p.Transparency = out and 0 or 1
+	end
+end
+
+local function setNoseFx(m, on)
+	if not m then return end
+	local n = m:FindFirstChild("NoseFx")
+	if not n then return end
+	local e1 = n:FindFirstChild("NoseFlame")
+	local e2 = n:FindFirstChild("NoseSpark")
+	local l = n:FindFirstChildOfClass("PointLight")
+	if e1 then e1.Rate = on and 80 or 0 end
+	if e2 then e2.Rate = on and 45 or 0 end
+	if l then l.Brightness = on and 5 or 0 end
+	if on then
+		local s = 1.3 + 0.5 * math.sin(os.clock() * 16)
+		n.Size = Vector3.new(s, s, s)
+		n.Transparency = 0.15
+	else
+		n.Transparency = 1
+	end
+end
+
+local function setLandFx(m, on)
+	if not m then return end
+	local lf = m:FindFirstChild("LandLights")
+	if not lf then return end
+	local pulse = 0.5 + 0.5 * math.sin(os.clock() * 12)
+	for _, p in ipairs(lf:GetChildren()) do
+		p.Transparency = on and (0.05 + 0.45 * (1 - pulse)) or 1
+		local l = p:FindFirstChildOfClass("PointLight")
+		if l then l.Brightness = on and (1.5 + 3 * pulse) or 0 end
+	end
+end
+
+local function landBurst(m)
+	if not m then return end
+	local wf = m:FindFirstChild("Wheels")
+	if not wf then return end
+	for _, p in ipairs(wf:GetChildren()) do
+		local e = p:FindFirstChild("TouchSpark")
+		if e then e:Emit(22) end
+	end
+end
+
+-- เส้นแสงปลายปีกตอนเลี้ยว
+local function setTurnFx(m, on)
+	if not m then return end
+	for _, name in ipairs({"TipL", "TipR"}) do
+		local tip = m:FindFirstChild(name)
+		if tip then
+			local tr = tip:FindFirstChild("TurnTrail")
+			if tr then tr.Enabled = on end
+			local sp = tip:FindFirstChild("TurnSpark")
+			if sp then sp.Rate = on and 35 or 0 end
+		end
+	end
+end
+
+-- ไอน้ำสีขาวปลายปีก (ตอนเลี้ยวแรง/เร่ง/กลิ้ง)
+local function setVapor(m, on)
+	if not m then return end
+	for _, name in ipairs({"TipL", "TipR"}) do
+		local tip = m:FindFirstChild(name)
+		local tr = tip and tip:FindFirstChild("Vapor")
+		if tr and tr.Enabled ~= on then tr.Enabled = on end
+	end
+end
+
+-- ควันสีรุ้งปลายปีก (สกิลควันสี)
+local function setRainbow(m, on)
+	if not m then return end
+	for _, name in ipairs({"TipL", "TipR"}) do
+		local tip = m:FindFirstChild(name)
+		local tr = tip and tip:FindFirstChild("Rainbow")
+		if tr and tr.Enabled ~= on then tr.Enabled = on end
+	end
+end
+
+local function setShield(m, on)
+	if not m then return end
+	local s = m:FindFirstChild("Shield")
+	if not s then return end
+	if on then
+		s.Transparency = 0.6 + 0.12 * math.sin(os.clock() * 7)
+	else
+		s.Transparency = 1
+	end
+end
+
+local function setCloak(m, on)
+	if not m then return end
+	for _, p in ipairs(m:GetDescendants()) do
+		if p:IsA("BasePart") then
+			p.LocalTransparencyModifier = on and 0.82 or 0
+		end
+	end
+end
+
+-- สถานะร่วมของทุกไฟล์
+local S = {
+	jet = nil, riding = false, boosting = false, mode = "ground",
+	wantTakeoff = false, rolling = false, rollStart = 0,
+	shieldUntil = 0, cloakUntil = 0, rainbowUntil = 0, laserUntil = 0,
+	cloakOn = false, rainbowOn = false,
+	shake = 0, speed = 0,
+}
+
+env.NEXORA_JET = {
+	gui = gui, conns = {}, cleanupHooks = {}, S = S,
+	callBtn = callBtn, boardBtn = boardBtn, takeoffBtn = takeoffBtn,
+	up = up, down = down, left = left, right = right,
+	missileBtn = missileBtn, salvoBtn = salvoBtn, boostBtn = boostBtn, shieldBtn = shieldBtn,
+	rollBtn = rollBtn, novaBtn = novaBtn, cloakBtn = cloakBtn,
+	laserBtn = laserBtn, bombBtn = bombBtn, flareBtn = flareBtn, rainbowBtn = rainbowBtn,
+	landBtn = landBtn,
+	inp = inp, setUI = setUI,
+	setWheels = setWheels, setFire = setFire,
+	setNoseFx = setNoseFx, setLandFx = setLandFx, landBurst = landBurst,
+	setTurnFx = setTurnFx, setVapor = setVapor, setRainbow = setRainbow,
+	setShield = setShield, setCloak = setCloak,
+	GROUND_H = 3.05,
+}
+print("[NEXORA] ไฟล์ 1/5 พร้อมแล้ว → รันไฟล์ 2")
+-- NEXORA | เจ็ตขับไล่ V3 — ไฟล์ 2/5 (โมเดลเจ็ต + หลังคาห้องนักบินใหม่)
+local env = (getgenv and getgenv()) or _G
+local J = env.NEXORA_JET
+if not (J and J.S) then warn("[NEXORA] ต้องรันไฟล์ 1 ก่อน") return end
+
+local PURPLE = Color3.fromRGB(180, 90, 255)
+local RED = Color3.fromRGB(230, 40, 55)
+local ORANGE_SEQ = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 245, 170)),
+	ColorSequenceKeypoint.new(0.4, Color3.fromRGB(255, 140, 30)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(200, 40, 10)),
+})
+local RAINBOW = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 60, 60)),
+	ColorSequenceKeypoint.new(0.17, Color3.fromRGB(255, 160, 40)),
+	ColorSequenceKeypoint.new(0.34, Color3.fromRGB(255, 240, 60)),
+	ColorSequenceKeypoint.new(0.5, Color3.fromRGB(70, 255, 120)),
+	ColorSequenceKeypoint.new(0.67, Color3.fromRGB(60, 200, 255)),
+	ColorSequenceKeypoint.new(0.84, Color3.fromRGB(110, 90, 255)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(220, 90, 255)),
+})
+local NORM_SIZE = NumberSequence.new({NumberSequenceKeypoint.new(0, 1.8), NumberSequenceKeypoint.new(1, 0.2)})
+local FLAME_ORANGE = Color3.fromRGB(255, 140, 40)
+local CORE_ORANGE = Color3.fromRGB(255, 245, 200)
+local FIRE_TEX = "rbxasset://textures/particles/fire_main.dds"
+local SPARK_TEX = "rbxasset://textures/particles/sparkles_main.dds"
+local SMOKE_TEX = "rbxasset://textures/particles/smoke_main.dds"
+local NSK = NumberSequenceKeypoint.new
+
+-- ตำแหน่งปากกระบอก (เลเซอร์) เทียบกับตัวเครื่อง
+J.MUZZLE = Vector3.new(0, -0.1, -17.9)
+
+local function buildJet()
+	local m = Instance.new("Model")
+	m.Name = "NEXORA_Jet"
+	local V, A, N = Vector3.new, CFrame.Angles, CFrame.new
+	local DARK = Color3.fromRGB(45, 50, 62)
+	local GREY = Color3.fromRGB(110, 120, 135)
+	local LIGHT = Color3.fromRGB(190, 195, 205)
+	local BLACK = Color3.fromRGB(15, 16, 20)
+
+	local function mk(size, cf, color, opts)
+		opts = opts or {}
+		local p = Instance.new("Part")
+		p.Size = size
+		p.Color = color
+		p.Material = opts.mat or Enum.Material.Metal
+		p.Transparency = opts.tr or 0
+		if opts.refl then p.Reflectance = opts.refl end
+		p.Anchored = true
+		p.CanCollide = false
+		p.CanQuery = false
+		p.CanTouch = false
+		p.CastShadow = false
+		if opts.shape then p.Shape = opts.shape end
+		if opts.mesh then
+			local sm = Instance.new("SpecialMesh")
+			sm.MeshType = opts.mesh
+			sm.Scale = Vector3.new(1, 1, 1)
+			sm.Parent = p
+		end
+		if opts.accent then p:SetAttribute("Accent", true) end
+		p.CFrame = cf
+		p.Parent = m
+		return p
+	end
+
+	local function cyl(len, dia, cf, color, opts)
+		opts = opts or {}
+		opts.shape = Enum.PartType.Cylinder
+		return mk(V(len, dia, dia), cf * A(0, math.rad(90), 0), color, opts)
+	end
+
+	-- แท่งเชื่อมจุดสองจุด (ใช้ทำโครงหลังคา)
+	local function bar(p1, p2, th, color)
+		local d = p2 - p1
+		local len = d.Magnitude
+		if len < 0.001 then return end
+		mk(V(th, th, len + 0.02), CFrame.lookAt(p1 + d / 2, p2), color)
+	end
+
+	local pivot = mk(V(1, 1, 1), N(0, 0, 0), DARK, {tr = 1})
+
+	-- ลำตัว
+	mk(V(2.8, 2.0, 12), N(0, 0, 0.5), DARK)
+	mk(V(2.0, 0.7, 11), N(0, 1.15, 1.5), GREY)
+	mk(V(2.4, 0.5, 9), N(0, -1.05, 1.5), GREY)
+	mk(V(2.3, 1.7, 3), N(0, 0, -7), GREY)
+	mk(V(1.7, 1.3, 3), N(0, -0.05, -9.6), DARK)
+	mk(V(1.2, 1.0, 5), N(0, -0.1, -13.2), GREY, {mesh = Enum.MeshType.Sphere})
+	mk(V(0.12, 0.12, 2.6), N(0, -0.1, -16.6), LIGHT)
+	mk(V(0.12, 0.45, 9), N(1.43, 0, -0.5), RED, {mat = Enum.Material.Neon, accent = true})
+	mk(V(0.12, 0.45, 9), N(-1.43, 0, -0.5), RED, {mat = Enum.Material.Neon, accent = true})
+
+	-- ===== ห้องนักบิน (หลังคาทรงหยดน้ำแบบเจ็ตขับไล่) =====
+	-- ศูนย์กลางกระจก z=-5.6 ครึ่งความยาว 2.6 ฐาน y=1.05
+	local ZC, HL, BASE_Y, RX, RY = -5.6, 2.6, 1.05, 0.75, 0.9
+
+	-- บอลเลย์/ขอบรอบห้องนักบิน
+	mk(V(1.7, 0.18, 6.4), N(0, 1.02, -5.3), BLACK)
+
+	-- แฟริ่งท้ายหลังคาต่อเข้ากับสันหลัง
+	mk(V(1.3, 1.1, 5.2), N(0, 1.2, -2.1), GREY, {mesh = Enum.MeshType.Sphere})
+
+	-- ภายในห้องนักบิน: เบาะ นักบิน แผงหน้าปัด HUD
+	mk(V(0.8, 0.45, 0.9), N(0, 1.2, -4.7), BLACK)
+	mk(V(0.8, 0.8, 0.2), N(0, 1.35, -4.2), BLACK)
+	mk(V(0.7, 0.55, 0.5), N(0, 1.2, -4.85), Color3.fromRGB(70, 82, 70), {mat = Enum.Material.Fabric})
+	mk(V(0.55, 0.55, 0.55), N(0, 1.52, -4.85), Color3.fromRGB(225, 228, 235), {shape = Enum.PartType.Ball, mat = Enum.Material.SmoothPlastic})
+	mk(V(0.46, 0.26, 0.3), N(0, 1.52, -5.1), Color3.fromRGB(190, 140, 40), {mat = Enum.Material.Glass, mesh = Enum.MeshType.Sphere, refl = 0.3})
+	mk(V(1.1, 0.3, 0.8), N(0, 1.12, -7.0) * A(math.rad(15), 0, 0), BLACK)
+	mk(V(0.8, 0.55, 0.04), N(0, 1.55, -6.95) * A(math.rad(25), 0, 0), Color3.fromRGB(80, 255, 140), {mat = Enum.Material.Neon, tr = 0.72})
+
+	-- กระจกหลังคา (ทรงรี ยาวเรียว)
+	mk(V(RX * 2, RY * 2, HL * 2), N(0, BASE_Y, ZC), Color3.fromRGB(120, 195, 230),
+		{mat = Enum.Material.Glass, tr = 0.4, refl = 0.2, mesh = Enum.MeshType.Sphere})
+	-- แถบสะท้อนแสงบนกระจก
+	mk(V(0.05, 0.04, 1.8), N(-0.3, 1.9, -5.9) * A(math.rad(4), 0, 0), Color3.fromRGB(255, 255, 255), {mat = Enum.Material.Neon, tr = 0.55})
+
+	-- โครงหลังคา: โค้งขวาง 3 ตำแหน่ง
+	local function arch(z, th)
+		local k = math.sqrt(math.max(0, 1 - ((z - ZC) / HL) ^ 2))
+		local rx, ry = RX * k * 1.03, RY * k * 1.03
+		local prev
+		for i = 0, 8 do
+			local a = math.rad(i * 22.5)
+			local pt = V(rx * math.cos(a), BASE_Y + ry * math.sin(a), z)
+			if prev then bar(prev, pt, th, DARK) end
+			prev = pt
+		end
+	end
+	arch(-7.5, 0.12)
+	arch(-5.6, 0.08)
+	arch(-3.7, 0.1)
+
+	-- โครงหลังคา: สันกลางและรางข้าง
+	local zs = {-7.9, -6.8, -5.6, -4.4, -3.3}
+	local topPrev, railL, railR
+	for _, z in ipairs(zs) do
+		local k = math.sqrt(math.max(0, 1 - ((z - ZC) / HL) ^ 2))
+		local top = V(0, BASE_Y + RY * k * 1.03, z)
+		local rl = V(-RX * k * 1.03, BASE_Y, z)
+		local rr = V(RX * k * 1.03, BASE_Y, z)
+		if topPrev then
+			bar(topPrev, top, 0.07, DARK)
+			bar(railL, rl, 0.08, DARK)
+			bar(railR, rr, 0.08, DARK)
+		end
+		topPrev, railL, railR = top, rl, rr
+	end
+
+	-- ช่องรับอากาศ
+	for _, s in ipairs({1, -1}) do
+		mk(V(1.7, 1.6, 5), N(2.05 * s, -0.35, -3.4), DARK)
+		mk(V(1.5, 1.3, 0.15), N(2.05 * s, -0.35, -5.95), BLACK)
+	end
+
+	-- ปีก + หาง + ครีบ + มิสไซล์ใต้ปีก
+	for _, s in ipairs({1, -1}) do
+		local th = math.rad(-30) * s
+		mk(V(10, 0.3, 5.5), N(6.4 * s, -0.3, 2.2) * A(0, th, 0), GREY)
+		mk(V(3.2, 0.28, 5), N(2.2 * s, -0.3, 0.2), GREY)
+		mk(V(4, 0.2, 1.4), N(2.1 * s, -0.1, -5.2) * A(0, math.rad(-70) * s, 0), GREY)
+
+		local tip = mk(V(1.4, 0.4, 4.2), N(11.3 * s, -0.3, 5.0) * A(0, th, 0), RED, {mat = Enum.Material.Neon, accent = true})
+		tip.Name = (s == 1) and "TipR" or "TipL"
+		local a0 = Instance.new("Attachment")
+		a0.Position = V(0, 0, -2.0)
+		a0.Parent = tip
+		local a1 = Instance.new("Attachment")
+		a1.Position = V(0, 0, 2.0)
+		a1.Parent = tip
+
+		local function trail(name, life, col, trans, wid, emis)
+			local tr = Instance.new("Trail")
+			tr.Name = name
+			tr.Attachment0 = a0
+			tr.Attachment1 = a1
+			tr.Lifetime = life
+			tr.MinLength = 0.05
+			tr.LightEmission = emis
+			tr.LightInfluence = 0
+			tr.Color = col
+			tr.Transparency = trans
+			tr.WidthScale = wid
+			tr.Enabled = false
+			tr.Parent = tip
+		end
+		trail("TurnTrail", 0.8,
+			ColorSequence.new(Color3.fromRGB(150, 235, 255), Color3.fromRGB(190, 110, 255)),
+			NumberSequence.new({NSK(0, 0.05), NSK(1, 1)}),
+			NumberSequence.new({NSK(0, 1), NSK(1, 0.15)}), 1)
+		trail("Vapor", 1.0,
+			ColorSequence.new(Color3.new(1, 1, 1)),
+			NumberSequence.new({NSK(0, 0.45), NSK(1, 1)}),
+			NumberSequence.new({NSK(0, 0.6), NSK(1, 1.4)}), 0.25)
+		trail("Rainbow", 2.4, RAINBOW,
+			NumberSequence.new({NSK(0, 0.1), NSK(1, 1)}),
+			NumberSequence.new({NSK(0, 1), NSK(1, 0.3)}), 1)
+
+		local sp = Instance.new("ParticleEmitter")
+		sp.Name = "TurnSpark"
+		sp.Texture = SPARK_TEX
+		sp.Color = ColorSequence.new(Color3.fromRGB(170, 240, 255), Color3.fromRGB(200, 130, 255))
+		sp.Size = NumberSequence.new({NSK(0, 0.7), NSK(1, 0)})
+		sp.Lifetime = NumberRange.new(0.3, 0.6)
+		sp.Speed = NumberRange.new(4, 10)
+		sp.SpreadAngle = Vector2.new(60, 60)
+		sp.LightEmission = 1
+		sp.LockedToPart = false
+		sp.EmissionDirection = Enum.NormalId.Back
+		sp.Rate = 0
+		sp.Parent = tip
+
+		mk(V(4.2, 0.25, 2.6), N(3.3 * s, 0, 7.4) * A(0, math.rad(-35) * s, 0), GREY)
+		mk(V(0.22, 3.6, 3.4), N(2.3 * s, 2.4, 6.4) * A(0, 0, math.rad(-16) * s), DARK)
+		mk(V(0.26, 1.1, 1.1), N(2.66 * s, 3.65, 6.9) * A(0, 0, math.rad(-16) * s), RED, {mat = Enum.Material.Neon, accent = true})
+
+		mk(V(0.12, 0.55, 1.0), N(4.5 * s, -0.6, 1.1), DARK)
+		cyl(2.8, 0.45, N(4.5 * s, -0.95, 1.1), LIGHT)
+		cyl(0.3, 0.4, N(4.5 * s, -0.95, -0.4), RED, {mat = Enum.Material.Neon, accent = true})
+	end
+
+	-- ท้ายเครื่อง: เครื่องยนต์คู่ + หัวฉีดกลีบ + วงแหวนเรืองแสง
+	local exf = Instance.new("Folder")
+	exf.Name = "Exhausts"
+	exf.Parent = m
+
+	for _, s in ipairs({1, -1}) do
+		local ex0 = 1.05 * s
+		cyl(3.2, 1.9, N(ex0, 0, 7.6), DARK)
+		cyl(0.25, 2.1, N(ex0, 0, 6.1), GREY)
+		cyl(1.0, 2.0, N(ex0, 0, 9.7), GREY)
+		cyl(0.2, 1.7, N(ex0, 0, 10.0), RED, {mat = Enum.Material.Neon, accent = true})
+		for k = 0, 7 do
+			local a = math.rad(k * 45)
+			local r = 0.95 + ((k % 2 == 0) and 0.05 or -0.05)
+			local cf = N(ex0 + r * math.cos(a), r * math.sin(a), 10.5) * A(0, 0, a - math.rad(90))
+			mk(V(0.78, 0.12, 1.2), cf, (k % 2 == 0) and GREY or DARK)
+		end
+
+		local ex = mk(V(0.5, 0.5, 0.5), N(ex0, 0, 11.6), DARK, {tr = 1})
+		ex.Name = "Exhaust"
+		ex.Parent = exf
+
+		local flame = cyl(4, 1.5, N(ex0, 0, 13), FLAME_ORANGE, {mat = Enum.Material.Neon, tr = 1})
+		flame.Name = "Flame"
+		flame.Parent = ex
+		local core = cyl(2, 0.7, N(ex0, 0, 12.5), CORE_ORANGE, {mat = Enum.Material.Neon, tr = 1})
+		core.Name = "FlameCore"
+		core.Parent = ex
+
+		local fire = Instance.new("ParticleEmitter")
+		fire.Name = "FireFx"
+		fire.Texture = FIRE_TEX
+		fire.Color = ORANGE_SEQ
+		fire.Size = NORM_SIZE
+		fire.Transparency = NumberSequence.new({NSK(0, 0.1), NSK(1, 1)})
+		fire.Lifetime = NumberRange.new(0.3, 0.5)
+		fire.Speed = NumberRange.new(20, 30)
+		fire.SpreadAngle = Vector2.new(4, 4)
+		fire.Rotation = NumberRange.new(0, 360)
+		fire.RotSpeed = NumberRange.new(-60, 60)
+		fire.LightEmission = 1
+		fire.LightInfluence = 0
+		fire.LockedToPart = false
+		fire.EmissionDirection = Enum.NormalId.Back
+		fire.Rate = 0
+		fire.Parent = ex
+
+		local smoke = Instance.new("ParticleEmitter")
+		smoke.Name = "SmokeFx"
+		smoke.Texture = SMOKE_TEX
+		smoke.Color = ColorSequence.new(Color3.fromRGB(120, 120, 125))
+		smoke.Size = NumberSequence.new({NSK(0, 1.2), NSK(1, 4)})
+		smoke.Transparency = NumberSequence.new({NSK(0, 0.5), NSK(1, 1)})
+		smoke.Lifetime = NumberRange.new(0.8, 1.3)
+		smoke.Speed = NumberRange.new(8, 14)
+		smoke.SpreadAngle = Vector2.new(8, 8)
+		smoke.LockedToPart = false
+		smoke.EmissionDirection = Enum.NormalId.Back
+		smoke.Rate = 0
+		smoke.Parent = ex
+
+		local light = Instance.new("PointLight")
+		light.Color = Color3.fromRGB(255, 150, 60)
+		light.Range = 12
+		light.Brightness = 0
+		light.Parent = ex
+	end
+
+	mk(V(0.45, 0.45, 3.4), N(0, 0.35, 8.9), DARK)
+	mk(V(0.3, 0.3, 0.6), N(0, 0.35, 10.8), RED, {mat = Enum.Material.Neon, accent = true})
+
+	-- ล้อ
+	local wf = Instance.new("Folder")
+	wf.Name = "Wheels"
+	wf.Parent = m
+	local function wheel(x, z)
+		local st = mk(V(0.3, 1.3, 0.3), N(x, -1.75, z), GREY)
+		st.Name = "Strut"
+		local wh = mk(V(0.6, 1.6, 1.6), N(x, -2.2, z), Color3.fromRGB(25, 25, 28), {shape = Enum.PartType.Cylinder, mat = Enum.Material.SmoothPlastic})
+		wh.Name = "Wheel"
+		st.Parent = wf
+		wh.Parent = wf
+		local ts = Instance.new("ParticleEmitter")
+		ts.Name = "TouchSpark"
+		ts.Texture = SPARK_TEX
+		ts.Color = ColorSequence.new(Color3.fromRGB(255, 220, 120), Color3.fromRGB(255, 110, 20))
+		ts.Size = NumberSequence.new({NSK(0, 0.6), NSK(1, 0)})
+		ts.Lifetime = NumberRange.new(0.35, 0.8)
+		ts.Speed = NumberRange.new(10, 25)
+		ts.SpreadAngle = Vector2.new(60, 60)
+		ts.Acceleration = Vector3.new(0, -35, 0)
+		ts.LightEmission = 1
+		ts.Rate = 0
+		ts.Parent = wh
+	end
+	wheel(1.7, 2.5)
+	wheel(-1.7, 2.5)
+	wheel(0, -6.2)
+
+	-- ไฟส้มตอนลง
+	local lf = Instance.new("Folder")
+	lf.Name = "LandLights"
+	lf.Parent = m
+	local function landLight(pos, size)
+		local p = mk(size, N(pos), Color3.fromRGB(255, 140, 30), {mat = Enum.Material.Neon, tr = 1})
+		p.Parent = lf
+		local l = Instance.new("PointLight")
+		l.Color = Color3.fromRGB(255, 150, 50)
+		l.Range = 16
+		l.Brightness = 0
+		l.Parent = p
+	end
+	landLight(V(4.6, -0.55, 1.1), V(0.8, 0.2, 0.8))
+	landLight(V(-4.6, -0.55, 1.1), V(0.8, 0.2, 0.8))
+	landLight(V(0, -1.15, -9.6), V(0.9, 0.2, 1.4))
+
+	-- ไฟม่วงที่หัว (ตอนบินขึ้น / ชาร์จเลเซอร์)
+	local nose = mk(V(1.5, 1.5, 1.5), N(0, -0.1, -17.8), Color3.fromRGB(190, 110, 255), {shape = Enum.PartType.Ball, mat = Enum.Material.Neon, tr = 1})
+	nose.Name = "NoseFx"
+	local nf = Instance.new("ParticleEmitter")
+	nf.Name = "NoseFlame"
+	nf.Texture = FIRE_TEX
+	nf.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(235, 200, 255)),
+		ColorSequenceKeypoint.new(0.5, Color3.fromRGB(170, 80, 255)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(70, 20, 150)),
+	})
+	nf.Size = NumberSequence.new({NSK(0, 1.8), NSK(1, 0.2)})
+	nf.Transparency = NumberSequence.new({NSK(0, 0.1), NSK(1, 1)})
+	nf.Lifetime = NumberRange.new(0.4, 0.7)
+	nf.Speed = NumberRange.new(2, 6)
+	nf.SpreadAngle = Vector2.new(25, 25)
+	nf.LightEmission = 1
+	nf.LightInfluence = 0
+	nf.LockedToPart = false
+	nf.EmissionDirection = Enum.NormalId.Front
+	nf.Rate = 0
+	nf.Parent = nose
+	local ns = Instance.new("ParticleEmitter")
+	ns.Name = "NoseSpark"
+	ns.Texture = SPARK_TEX
+	ns.Color = ColorSequence.new(Color3.fromRGB(230, 190, 255), Color3.fromRGB(150, 70, 255))
+	ns.Size = NumberSequence.new({NSK(0, 0.9), NSK(1, 0)})
+	ns.Lifetime = NumberRange.new(0.4, 0.8)
+	ns.Speed = NumberRange.new(10, 22)
+	ns.SpreadAngle = Vector2.new(35, 35)
+	ns.LightEmission = 1
+	ns.LockedToPart = false
+	ns.EmissionDirection = Enum.NormalId.Front
+	ns.Rate = 0
+	ns.Parent = nose
+	local nl = Instance.new("PointLight")
+	nl.Color = PURPLE
+	nl.Range = 18
+	nl.Brightness = 0
+	nl.Parent = nose
+
+	-- โล่พลังงาน
+	local shield = mk(V(38, 38, 38), N(0, 0, -1), Color3.fromRGB(80, 200, 255), {shape = Enum.PartType.Ball, mat = Enum.Material.ForceField, tr = 1})
+	shield.Name = "Shield"
+
+	-- รัศมีม่วงรอบเครื่อง (ตอนเร่ง)
+	local hl = Instance.new("Highlight")
+	hl.Name = "BoostHL"
+	hl.FillColor = PURPLE
+	hl.OutlineColor = Color3.fromRGB(225, 170, 255)
+	hl.FillTransparency = 0.72
+	hl.OutlineTransparency = 0
+	hl.DepthMode = Enum.HighlightDepthMode.Occluded
+	hl.Enabled = false
+	hl.Adornee = m
+	hl.Parent = m
+
+	m.PrimaryPart = pivot
+	m.Parent = workspace
+	return m
+end
+
+J.buildJet = buildJet
+print("[NEXORA] ไฟล์ 2/5 พร้อมแล้ว → รันไฟล์ 3")
+-- NEXORA | เจ็ตขับไล่ V3 — ไฟล์ 3/5 (อาวุธ + เอฟเฟกต์ระเบิด/เลเซอร์/ระเบิดทิ้ง/แฟลร์)
+local Players = game:GetService("Players")
+local TS = game:GetService("TweenService")
+local RS = game:GetService("RunService")
+local Debris = game:GetService("Debris")
+local lp = Players.LocalPlayer
+local env = (getgenv and getgenv()) or _G
+local J = env.NEXORA_JET
+if not (J and J.buildJet) then warn("[NEXORA] ต้องรันไฟล์ 1 และ 2 ก่อน") return end
+local S = J.S
+
+local FIRE_TEX = "rbxasset://textures/particles/fire_main.dds"
+local SPARK_TEX = "rbxasset://textures/particles/sparkles_main.dds"
+local SMOKE_TEX = "rbxasset://textures/particles/smoke_main.dds"
+local NSK = NumberSequenceKeypoint.new
+
+local mf = workspace:FindFirstChild("NEXORA_Missiles")
+if not mf then
+	mf = Instance.new("Folder")
+	mf.Name = "NEXORA_Missiles"
+	mf.Parent = workspace
+end
+
+-- สั่นกล้อง
+local function addShake(x)
+	S.shake = math.min(2.2, S.shake + x)
+end
+
+local function excludeList()
+	local ex = {mf}
+	if S.jet then table.insert(ex, S.jet) end
+	if lp.Character then table.insert(ex, lp.Character) end
+	return ex
+end
+
+-- ===== ระเบิดเรืองแสง (sc = ขนาด) =====
+local function explode(pos, sc)
+	sc = sc or 1
+	local function ball(color, s0, s1, t, tr0)
+		local p = Instance.new("Part")
+		p.Shape = Enum.PartType.Ball
+		p.Material = Enum.Material.Neon
+		p.Color = color
+		p.Anchored = true
+		p.CanCollide = false
+		p.CanQuery = false
+		p.CanTouch = false
+		p.Size = Vector3.new(s0 * sc, s0 * sc, s0 * sc)
+		p.Transparency = tr0
+		p.CFrame = CFrame.new(pos)
+		p.Parent = workspace
+		TS:Create(p, TweenInfo.new(t, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			Size = Vector3.new(s1 * sc, s1 * sc, s1 * sc),
+			Transparency = 1,
+		}):Play()
+		Debris:AddItem(p, t + 0.1)
+		return p
+	end
+	local core = ball(Color3.fromRGB(255, 190, 90), 2, 16, 0.35, 0)
+	ball(Color3.fromRGB(190, 100, 255), 3, 30, 0.55, 0.3)
+	ball(Color3.fromRGB(80, 230, 255), 1, 10, 0.25, 0.1)
+
+	-- วงแหวนกระแทกแนวนอน
+	local ring = Instance.new("Part")
+	ring.Shape = Enum.PartType.Cylinder
+	ring.Material = Enum.Material.Neon
+	ring.Color = Color3.fromRGB(255, 200, 120)
+	ring.Anchored = true
+	ring.CanCollide = false
+	ring.CanQuery = false
+	ring.CanTouch = false
+	ring.CastShadow = false
+	ring.Size = Vector3.new(0.4, 4 * sc, 4 * sc)
+	ring.CFrame = CFrame.new(pos) * CFrame.Angles(0, 0, math.rad(90))
+	ring.Transparency = 0.3
+	ring.Parent = workspace
+	TS:Create(ring, TweenInfo.new(0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		Size = Vector3.new(0.4, 46 * sc, 46 * sc),
+		Transparency = 1,
+	}):Play()
+	Debris:AddItem(ring, 0.6)
+
+	local l = Instance.new("PointLight")
+	l.Color = Color3.fromRGB(255, 170, 80)
+	l.Range = 35 * math.max(sc, 0.6)
+	l.Brightness = 8
+	l.Parent = core
+	TS:Create(l, TweenInfo.new(0.5), {Brightness = 0}):Play()
+
+	local sp = Instance.new("Part")
+	sp.Anchored = true
+	sp.CanCollide = false
+	sp.CanQuery = false
+	sp.CanTouch = false
+	sp.Transparency = 1
+	sp.Size = Vector3.new(1, 1, 1)
+	sp.CFrame = CFrame.new(pos)
+	sp.Parent = workspace
+
+	local pe = Instance.new("ParticleEmitter")
+	pe.Texture = SPARK_TEX
+	pe.Color = ColorSequence.new(Color3.fromRGB(255, 230, 150), Color3.fromRGB(255, 90, 30))
+	pe.Size = NumberSequence.new({NSK(0, 1.2), NSK(1, 0)})
+	pe.Lifetime = NumberRange.new(0.5, 0.9)
+	pe.Speed = NumberRange.new(30 * sc, 60 * sc)
+	pe.SpreadAngle = Vector2.new(180, 180)
+	pe.Acceleration = Vector3.new(0, -20, 0)
+	pe.LightEmission = 1
+	pe.Rate = 0
+	pe.Parent = sp
+	pe:Emit(math.max(8, math.floor(45 * sc)))
+
+	local sm = Instance.new("ParticleEmitter")
+	sm.Texture = SMOKE_TEX
+	sm.Color = ColorSequence.new(Color3.fromRGB(70, 70, 76))
+	sm.Size = NumberSequence.new({NSK(0, 2 * sc), NSK(1, 7 * sc)})
+	sm.Transparency = NumberSequence.new({NSK(0, 0.4), NSK(1, 1)})
+	sm.Lifetime = NumberRange.new(1, 1.8)
+	sm.Speed = NumberRange.new(6, 14)
+	sm.SpreadAngle = Vector2.new(180, 180)
+	sm.Rate = 0
+	sm.Parent = sp
+	sm:Emit(math.max(4, math.floor(12 * sc)))
+	Debris:AddItem(sp, 2.2)
+
+	-- สั่นกล้องตามระยะ
+	local c = workspace.CurrentCamera
+	if c then
+		local d = (c.CFrame.Position - pos).Magnitude
+		if d < 130 then addShake(sc * 0.5 * (1 - d / 130)) end
+	end
+end
+
+-- ===== คลื่นช็อก =====
+local function shockwave(pos, sc, skipExplode)
+	sc = sc or 1
+	local function shell(shape, color, s0, s1, t, cf, tr0)
+		local p = Instance.new("Part")
+		p.Shape = shape
+		p.Material = Enum.Material.Neon
+		p.Color = color
+		p.Anchored = true
+		p.CanCollide = false
+		p.CanQuery = false
+		p.CanTouch = false
+		p.CastShadow = false
+		p.Size = s0
+		p.CFrame = cf
+		p.Transparency = tr0
+		p.Parent = workspace
+		TS:Create(p, TweenInfo.new(t, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			Size = s1,
+			Transparency = 1,
+		}):Play()
+		Debris:AddItem(p, t + 0.1)
+	end
+	shell(Enum.PartType.Ball, Color3.fromRGB(90, 255, 220), Vector3.new(4, 4, 4) * sc, Vector3.new(150, 150, 150) * sc, 0.7, CFrame.new(pos), 0.4)
+	shell(Enum.PartType.Cylinder, Color3.fromRGB(190, 100, 255), Vector3.new(0.6, 6, 6) * sc, Vector3.new(0.6, 170, 170) * sc, 0.9,
+		CFrame.new(pos) * CFrame.Angles(0, 0, math.rad(90)), 0.2)
+	if not skipExplode then
+		explode(pos, sc)
+		addShake(1.0)
+	end
+end
+
+-- ===== จรวดเล็กเรืองแสง =====
+local function newMissile(cf)
+	local m = Instance.new("Model")
+	m.Name = "Missile"
+	local function part(size, off, color, mat)
+		local p = Instance.new("Part")
+		p.Size = size
+		p.Color = color
+		p.Material = mat or Enum.Material.Metal
+		p.Anchored = true
+		p.CanCollide = false
+		p.CanQuery = false
+		p.CanTouch = false
+		p.CFrame = cf * CFrame.new(off)
+		p.Parent = m
+		return p
+	end
+	local body = part(Vector3.new(0.5, 0.5, 2.2), Vector3.new(0, 0, 0), Color3.fromRGB(60, 230, 255), Enum.Material.Neon)
+	part(Vector3.new(0.34, 0.34, 0.7), Vector3.new(0, 0, -1.4), Color3.new(1, 1, 1), Enum.Material.Neon)
+	part(Vector3.new(1.5, 0.08, 0.55), Vector3.new(0, 0, 0.85), Color3.fromRGB(30, 35, 45))
+	part(Vector3.new(0.08, 1.5, 0.55), Vector3.new(0, 0, 0.85), Color3.fromRGB(30, 35, 45))
+	m.PrimaryPart = body
+
+	local a0 = Instance.new("Attachment")
+	a0.Position = Vector3.new(0, 0.25, 1.1)
+	a0.Parent = body
+	local a1 = Instance.new("Attachment")
+	a1.Position = Vector3.new(0, -0.25, 1.1)
+	a1.Parent = body
+	local tr = Instance.new("Trail")
+	tr.Attachment0 = a0
+	tr.Attachment1 = a1
+	tr.Lifetime = 0.5
+	tr.LightEmission = 1
+	tr.LightInfluence = 0
+	tr.Color = ColorSequence.new(Color3.fromRGB(255, 220, 150), Color3.fromRGB(255, 90, 30))
+	tr.Transparency = NumberSequence.new({NSK(0, 0.1), NSK(1, 1)})
+	tr.Parent = body
+
+	local att = Instance.new("Attachment")
+	att.Position = Vector3.new(0, 0, 1.15)
+	att.Parent = body
+	local fe = Instance.new("ParticleEmitter")
+	fe.Texture = FIRE_TEX
+	fe.Color = ColorSequence.new(Color3.fromRGB(255, 240, 180), Color3.fromRGB(255, 110, 30))
+	fe.Size = NumberSequence.new({NSK(0, 0.9), NSK(1, 0)})
+	fe.Transparency = NumberSequence.new({NSK(0, 0.1), NSK(1, 1)})
+	fe.Lifetime = NumberRange.new(0.25, 0.4)
+	fe.Speed = NumberRange.new(4, 8)
+	fe.Rate = 90
+	fe.LightEmission = 1
+	fe.LockedToPart = false
+	fe.EmissionDirection = Enum.NormalId.Back
+	fe.Parent = att
+
+	local light = Instance.new("PointLight")
+	light.Color = Color3.fromRGB(80, 230, 255)
+	light.Range = 12
+	light.Brightness = 2
+	light.Parent = body
+
+	m.Parent = mf
+	return m
+end
+
+-- ===== แฟลชตอนยิง =====
+local function muzzleFlash(pos)
+	local p = Instance.new("Part")
+	p.Shape = Enum.PartType.Ball
+	p.Material = Enum.Material.Neon
+	p.Color = Color3.fromRGB(255, 230, 160)
+	p.Anchored = true
+	p.CanCollide = false
+	p.CanQuery = false
+	p.CanTouch = false
+	p.CastShadow = false
+	p.Size = Vector3.new(1, 1, 1)
+	p.CFrame = CFrame.new(pos)
+	p.Parent = workspace
+	TS:Create(p, TweenInfo.new(0.15), {Size = Vector3.new(4, 4, 4), Transparency = 1}):Play()
+	local l = Instance.new("PointLight")
+	l.Color = Color3.fromRGB(255, 200, 120)
+	l.Range = 14
+	l.Brightness = 4
+	l.Parent = p
+	TS:Create(l, TweenInfo.new(0.2), {Brightness = 0}):Play()
+	Debris:AddItem(p, 0.3)
+end
+
+-- ===== วงคลื่นเสียงตอนเร่ง =====
+local function boostRing(cf)
+	local cols = {Color3.fromRGB(190, 100, 255), Color3.fromRGB(120, 230, 255), Color3.fromRGB(255, 255, 255)}
+	for i = 1, 3 do
+		local p = Instance.new("Part")
+		p.Shape = Enum.PartType.Cylinder
+		p.Material = Enum.Material.Neon
+		p.Color = cols[i]
+		p.Anchored = true
+		p.CanCollide = false
+		p.CanQuery = false
+		p.CanTouch = false
+		p.CastShadow = false
+		p.Size = Vector3.new(0.4, 6, 6)
+		p.Transparency = 0.3
+		p.CFrame = cf * CFrame.new(0, 0, (i - 1) * 2) * CFrame.Angles(0, math.rad(90), 0)
+		p.Parent = workspace
+		TS:Create(p, TweenInfo.new(0.7, Enum.EasingStyle.Quad, Enum.EasingDirection.Out, 0, false, (i - 1) * 0.07), {
+			Size = Vector3.new(0.4, 80 + i * 15, 80 + i * 15),
+			Transparency = 1,
+		}):Play()
+		Debris:AddItem(p, 1.4)
+	end
+end
+
+-- ===== เลเซอร์ลำแสง =====
+-- getCF() คืน CFrame ปากกระบอก (หรือ nil เพื่อหยุดยิง)
+local function fireLaser(getCF, dur)
+	local function mkBeam(color, tr)
+		local p = Instance.new("Part")
+		p.Anchored = true
+		p.CanCollide = false
+		p.CanQuery = false
+		p.CanTouch = false
+		p.CastShadow = false
+		p.Material = Enum.Material.Neon
+		p.Color = color
+		p.Transparency = tr
+		p.Size = Vector3.new(0.5, 0.5, 1)
+		p.Parent = mf
+		return p
+	end
+	local outer = mkBeam(Color3.fromRGB(255, 50, 100), 0.4)
+	local core = mkBeam(Color3.new(1, 1, 1), 0.05)
+
+	local tip = Instance.new("Part")
+	tip.Shape = Enum.PartType.Ball
+	tip.Anchored = true
+	tip.CanCollide = false
+	tip.CanQuery = false
+	tip.CanTouch = false
+	tip.CastShadow = false
+	tip.Material = Enum.Material.Neon
+	tip.Color = Color3.fromRGB(255, 190, 120)
+	tip.Transparency = 0.2
+	tip.Size = Vector3.new(1, 1, 1)
+	tip.Parent = mf
+	local tl = Instance.new("PointLight")
+	tl.Color = Color3.fromRGB(255, 90, 120)
+	tl.Range = 26
+	tl.Brightness = 0
+	tl.Parent = tip
+	local sparks = Instance.new("ParticleEmitter")
+	sparks.Texture = SPARK_TEX
+	sparks.Color = ColorSequence.new(Color3.fromRGB(255, 240, 200), Color3.fromRGB(255, 70, 90))
+	sparks.Size = NumberSequence.new({NSK(0, 1.0), NSK(1, 0)})
+	sparks.Lifetime = NumberRange.new(0.3, 0.6)
+	sparks.Speed = NumberRange.new(15, 35)
+	sparks.SpreadAngle = Vector2.new(180, 180)
+	sparks.LightEmission = 1
+	sparks.Rate = 0
+	sparks.Parent = tip
+
+	local t0, lastBoom = os.clock(), 0
+	local conn
+	conn = RS.Heartbeat:Connect(function()
+		local cf = getCF()
+		local el = os.clock() - t0
+		if not cf or el > dur then
+			conn:Disconnect()
+			outer:Destroy()
+			core:Destroy()
+			tip:Destroy()
+			return
+		end
+		local charge = math.clamp(el / 0.2, 0, 1)
+		local fade = math.clamp((dur - el) / 0.25, 0, 1)
+		local w = charge * fade * (0.9 + 0.1 * math.sin(el * 70))
+
+		local rp = RaycastParams.new()
+		rp.FilterType = Enum.RaycastFilterType.Exclude
+		rp.FilterDescendantsInstances = excludeList()
+		rp.IgnoreWater = true
+		local MAXL = 600
+		local hit = workspace:Raycast(cf.Position, cf.LookVector * MAXL, rp)
+		local len = math.max(0.5, hit and hit.Distance or MAXL)
+		local mid = cf.Position + cf.LookVector * (len / 2)
+		local fin = cf.Position + cf.LookVector * len
+
+		local ow = math.max(0.05, 2.2 * w)
+		local cw = math.max(0.05, 0.8 * w)
+		outer.Size = Vector3.new(ow, ow, len)
+		outer.CFrame = CFrame.lookAt(mid, fin)
+		core.Size = Vector3.new(cw, cw, len)
+		core.CFrame = outer.CFrame
+		local ts = math.max(0.1, 4 * w)
+		tip.Size = Vector3.new(ts, ts, ts)
+		tip.Position = fin
+		tl.Brightness = 6 * w
+		sparks.Rate = hit and 90 or 0
+
+		if hit and os.clock() - lastBoom > 0.14 then
+			lastBoom = os.clock()
+			explode(hit.Position, 0.5)
+		end
+	end)
+end
+
+-- ===== ระเบิดทิ้ง =====
+local function dropBomb(cf, vel)
+	local m = Instance.new("Model")
+	m.Name = "Bomb"
+	local function part(size, off, color, mat, shape, rot)
+		local p = Instance.new("Part")
+		p.Size = size
+		p.Color = color
+		p.Material = mat or Enum.Material.Metal
+		if shape then p.Shape = shape end
+		p.Anchored = true
+		p.CanCollide = false
+		p.CanQuery = false
+		p.CanTouch = false
+		p.CFrame = cf * CFrame.new(off) * (rot or CFrame.new())
+		p.Parent = m
+		return p
+	end
+	local pivot = part(Vector3.new(0.2, 0.2, 0.2), Vector3.new(0, 0, 0), Color3.new(0, 0, 0))
+	pivot.Transparency = 1
+	m.PrimaryPart = pivot
+	local rotY = CFrame.Angles(0, math.rad(90), 0)
+	part(Vector3.new(3.4, 1.1, 1.1), Vector3.new(0, 0, 0), Color3.fromRGB(55, 62, 55), Enum.Material.Metal, Enum.PartType.Cylinder, rotY)
+	part(Vector3.new(0.35, 1.18, 1.18), Vector3.new(0, 0, -0.6), Color3.fromRGB(255, 120, 40), Enum.Material.Neon, Enum.PartType.Cylinder, rotY)
+	part(Vector3.new(0.9, 0.9, 0.9), Vector3.new(0, 0, -1.8), Color3.fromRGB(255, 170, 60), Enum.Material.Neon, Enum.PartType.Ball)
+	part(Vector3.new(1.9, 0.1, 0.8), Vector3.new(0, 0, 1.4), Color3.fromRGB(35, 40, 48))
+	part(Vector3.new(0.1, 1.9, 0.8), Vector3.new(0, 0, 1.4), Color3.fromRGB(35, 40, 48))
+
+	local a0 = Instance.new("Attachment")
+	a0.Position = Vector3.new(0, 0.4, 1.6)
+	a0.Parent = pivot
+	local a1 = Instance.new("Attachment")
+	a1.Position = Vector3.new(0, -0.4, 1.6)
+	a1.Parent = pivot
+	local tr = Instance.new("Trail")
+	tr.Attachment0 = a0
+	tr.Attachment1 = a1
+	tr.Lifetime = 0.6
+	tr.LightEmission = 1
+	tr.LightInfluence = 0
+	tr.Color = ColorSequence.new(Color3.fromRGB(255, 200, 100), Color3.fromRGB(255, 70, 20))
+	tr.Transparency = NumberSequence.new({NSK(0, 0.1), NSK(1, 1)})
+	tr.Parent = pivot
+	local light = Instance.new("PointLight")
+	light.Color = Color3.fromRGB(255, 150, 60)
+	light.Range = 14
+	light.Brightness = 2
+	light.Parent = pivot
+	m.Parent = mf
+
+	local pos = cf.Position
+	local v = vel + Vector3.new(0, -8, 0)
+	local life = 0
+	local conn
+	conn = RS.Heartbeat:Connect(function(dt)
+		if not m.Parent then conn:Disconnect() return end
+		life = life + dt
+		v = v + Vector3.new(0, -75, 0) * dt
+		local step = v * dt
+		local rp = RaycastParams.new()
+		rp.FilterType = Enum.RaycastFilterType.Exclude
+		rp.FilterDescendantsInstances = excludeList()
+		rp.IgnoreWater = true
+		local hit = workspace:Raycast(pos, step + step.Unit * 1, rp)
+		if hit then
+			conn:Disconnect()
+			m:Destroy()
+			explode(hit.Position, 2.2)
+			shockwave(hit.Position, 0.7, true)
+			addShake(1.2)
+			return
+		end
+		pos = pos + step
+		m:PivotTo(CFrame.lookAt(pos, pos + v))
+		if life > 15 then
+			conn:Disconnect()
+			m:Destroy()
+		end
+	end)
+end
+
+-- ===== แฟลร์ล่อขีปนาวุธ =====
+local function dropFlares(cf, vel)
+	local colors = {Color3.fromRGB(255, 240, 190), Color3.fromRGB(255, 170, 60), Color3.fromRGB(255, 110, 50)}
+	for i = 1, 6 do
+		task.delay((i - 1) * 0.09, function()
+			local col = colors[(i % 3) + 1]
+			local p = Instance.new("Part")
+			p.Shape = Enum.PartType.Ball
+			p.Material = Enum.Material.Neon
+			p.Color = col
+			p.Size = Vector3.new(1.2, 1.2, 1.2)
+			p.Anchored = true
+			p.CanCollide = false
+			p.CanQuery = false
+			p.CanTouch = false
+			p.CastShadow = false
+			p.CFrame = CFrame.new(cf.Position)
+			p.Parent = mf
+
+			local a0 = Instance.new("Attachment")
+			a0.Position = Vector3.new(0, 0.5, 0)
+			a0.Parent = p
+			local a1 = Instance.new("Attachment")
+			a1.Position = Vector3.new(0, -0.5, 0)
+			a1.Parent = p
+			local tr = Instance.new("Trail")
+			tr.Attachment0 = a0
+			tr.Attachment1 = a1
+			tr.Lifetime = 0.9
+			tr.LightEmission = 1
+			tr.LightInfluence = 0
+			tr.Color = ColorSequence.new(col, Color3.fromRGB(255, 80, 30))
+			tr.Transparency = NumberSequence.new({NSK(0, 0.1), NSK(1, 1)})
+			tr.Parent = p
+
+			local light = Instance.new("PointLight")
+			light.Color = col
+			light.Range = 18
+			light.Brightness = 3
+			light.Parent = p
+
+			local sm = Instance.new("ParticleEmitter")
+			sm.Texture = SMOKE_TEX
+			sm.Color = ColorSequence.new(Color3.fromRGB(200, 200, 205))
+			sm.Size = NumberSequence.new({NSK(0, 0.8), NSK(1, 2.4)})
+			sm.Transparency = NumberSequence.new({NSK(0, 0.5), NSK(1, 1)})
+			sm.Lifetime = NumberRange.new(0.6, 1.0)
+			sm.Speed = NumberRange.new(1, 3)
+			sm.Rate = 25
+			sm.LockedToPart = false
+			sm.Parent = p
+
+			local dir = (cf.RightVector * ((math.random() * 2 - 1) * 0.9) + cf.UpVector * (-0.5 - math.random() * 0.5) - cf.LookVector * 0.6).Unit
+			local pos = cf.Position
+			local v = vel * 0.15 + dir * (24 + math.random() * 14)
+			local life = 0
+			local conn
+			conn = RS.Heartbeat:Connect(function(dt)
+				if not p.Parent then conn:Disconnect() return end
+				life = life + dt
+				v = v + Vector3.new(0, -26, 0) * dt - v * 0.9 * dt
+				pos = pos + v * dt
+				p.Position = pos
+				if life > 2.2 then
+					local f = math.clamp((life - 2.2) / 1.3, 0, 1)
+					p.Transparency = f
+					light.Brightness = 3 * (1 - f)
+					sm.Rate = 0
+				end
+				if life > 3.5 then
+					conn:Disconnect()
+					p:Destroy()
+				end
+			end)
+		end)
+	end
+end
+
+J.mf = mf
+J.addShake = addShake
+J.explode = explode
+J.shockwave = shockwave
+J.newMissile = newMissile
+J.muzzleFlash = muzzleFlash
+J.boostRing = boostRing
+J.fireLaser = fireLaser
+J.dropBomb = dropBomb
+J.dropFlares = dropFlares
+print("[NEXORA] ไฟล์ 3/5 พร้อมแล้ว → รันไฟล์ 4")
+-- NEXORA | เจ็ตขับไล่ V3 — ไฟล์ 4/5 (ระบบบิน + กล้องล็อกหลังเครื่อง + ซ่อนตัวละคร)
+local Players = game:GetService("Players")
+local RS = game:GetService("RunService")
+local lp = Players.LocalPlayer
+local cam = workspace.CurrentCamera
+
+local env = (getgenv and getgenv()) or _G
+local J = env.NEXORA_JET
+if not (J and J.buildJet and J.explode) then warn("[NEXORA] ต้องรันไฟล์ 1, 2 และ 3 ก่อน") return end
+
+local S, inp, setUI = J.S, J.inp, J.setUI
+local GROUND_H = J.GROUND_H
+local GROUND_MAX, GROUND_REV, AIR_SPEED = 35, 15, 90
+local mf = J.mf
+
+-- กล้องล็อกอยู่หลังเครื่อง (ไม่ลากหมุน ไม่ซูม)
+local CAM_DIST, CAM_UP = 34, 3
+
+local flyConn
+local oldMinZoom = lp.CameraMinZoomDistance
+local oldFOV = cam.FieldOfView
+
+-- ===== ซ่อน/คืนตัวละคร =====
+local hidden, charHidden, oldDisplay = {}, false, nil
+local function hideChar(c)
+	hidden = {}
+	for _, d in ipairs(c:GetDescendants()) do
+		if d:IsA("BasePart") or d:IsA("Decal") then
+			hidden[d] = d.Transparency
+			d.Transparency = 1
+		end
+	end
+	local hum = c:FindFirstChildOfClass("Humanoid")
+	if hum then
+		oldDisplay = hum.DisplayDistanceType
+		hum.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+	end
+	charHidden = true
+end
+local function showChar()
+	if not charHidden then return end
+	charHidden = false
+	for d, tr in pairs(hidden) do
+		if d.Parent then pcall(function() d.Transparency = tr end) end
+	end
+	hidden = {}
+	local c = lp.Character
+	local hum = c and c:FindFirstChildOfClass("Humanoid")
+	if hum and oldDisplay then pcall(function() hum.DisplayDistanceType = oldDisplay end) end
+end
+
+-- หาความสูงพื้นใต้ตำแหน่ง
+local function groundY(pos)
+	local list = {mf}
+	if S.jet then table.insert(list, S.jet) end
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p.Character then table.insert(list, p.Character) end
+	end
+	local rp = RaycastParams.new()
+	rp.FilterType = Enum.RaycastFilterType.Exclude
+	rp.FilterDescendantsInstances = list
+	rp.IgnoreWater = true
+	local r = workspace:Raycast(pos + Vector3.new(0, 12, 0), Vector3.new(0, -300, 0), rp)
+	return r and r.Position.Y or nil
+end
+
+local function cleanup()
+	S.riding, S.boosting, S.wantTakeoff = false, false, false
+	S.rolling, S.cloakOn, S.rainbowOn = false, false, false
+	S.shieldUntil, S.cloakUntil, S.rainbowUntil, S.laserUntil = 0, 0, 0, 0
+	S.shake, S.speed, S.mode = 0, 0, "ground"
+	for _, h in ipairs(J.cleanupHooks) do pcall(h) end
+	for k in pairs(inp) do inp[k] = false end
+	if flyConn then flyConn:Disconnect() flyConn = nil end
+	local c = lp.Character
+	local hrp = c and c:FindFirstChild("HumanoidRootPart")
+	local hum = c and c:FindFirstChildOfClass("Humanoid")
+	if hrp then hrp.Anchored = false end
+	if hum then
+		hum.PlatformStand = false
+		cam.CameraSubject = hum
+	end
+	cam.CameraType = Enum.CameraType.Custom
+	cam.FieldOfView = oldFOV
+	pcall(function() lp.CameraMinZoomDistance = oldMinZoom end)
+	showChar()
+	if S.jet then S.jet:Destroy() S.jet = nil end
+	setUI("idle")
+end
+J.cleanup = cleanup
+J.fullCleanup = function()
+	cleanup()
+	for _, c in ipairs(J.conns) do pcall(function() c:Disconnect() end) end
+	J.conns = {}
+end
+
+-- ===== เรียกเครื่องบิน =====
+J.callBtn.MouseButton1Click:Connect(function()
+	local c = lp.Character
+	local hrp = c and c:FindFirstChild("HumanoidRootPart")
+	if not hrp or S.jet then return end
+	setUI("none")
+	local myJet = J.buildJet()
+	S.jet = myJet
+
+	local fwd = hrp.CFrame.LookVector
+	local flat = Vector3.new(fwd.X, 0, fwd.Z)
+	flat = (flat.Magnitude > 0) and flat.Unit or Vector3.new(0, 0, -1)
+	local tpos = hrp.Position + flat * 30
+	local gy = groundY(tpos) or (hrp.Position.Y - 3)
+	local target = Vector3.new(tpos.X, gy + GROUND_H, tpos.Z)
+	local startPos = target + Vector3.new(350, 150, 350)
+	local dur, t = 4, 0
+	J.setWheels(myJet, false)
+
+	local conn
+	conn = RS.Heartbeat:Connect(function(dt)
+		if not myJet.Parent then conn:Disconnect() return end
+		t = math.min(t + dt, dur)
+		local a = t / dur
+		local e = 1 - (1 - a) ^ 2
+		local pos = startPos:Lerp(target, e)
+		local dir = (target - startPos).Unit
+		local look = Vector3.new(dir.X, dir.Y * (1 - e), dir.Z)
+		J.setFire(myJet, a < 0.9 and 90 or 12, false)
+		J.setWheels(myJet, a > 0.9)
+		J.setLandFx(myJet, a > 0.45)
+		myJet:PivotTo(CFrame.lookAt(pos, pos + look))
+		if t >= dur then
+			conn:Disconnect()
+			J.setFire(myJet, 0, false)
+			myJet:PivotTo(CFrame.lookAt(target, target - flat))
+			J.landBurst(myJet)
+			setUI("landed")
+			task.delay(2, function()
+				if myJet.Parent then J.setLandFx(myJet, false) end
+			end)
+		end
+	end)
+end)
+
+-- ===== ขึ้นขี่ =====
+J.boardBtn.MouseButton1Click:Connect(function()
+	local c = lp.Character
+	local hrp = c and c:FindFirstChild("HumanoidRootPart")
+	local hum = c and c:FindFirstChildOfClass("Humanoid")
+	if not (S.jet and hrp and hum) or S.riding then return end
+
+	S.riding = true
+	S.mode = "ground"
+	S.wantTakeoff = false
+	setUI("riding")
+	hum.PlatformStand = true
+	hrp.Anchored = true
+	hideChar(c)
+	J.setWheels(S.jet, true)
+
+	local startCF = S.jet.PrimaryPart.CFrame
+	local look = startCF.LookVector
+	local yaw = math.atan2(-look.X, -look.Z)
+	local pitch, roll, speed, grace = 0, 0, 0, 0
+	local noseT, rollT = 0, 0
+	local pos = startCF.Position
+	cam.CameraType = Enum.CameraType.Scriptable
+
+	flyConn = RS.RenderStepped:Connect(function(dt)
+		local jet = S.jet
+		if not (jet and jet.PrimaryPart and hrp.Parent) then cleanup() return end
+
+		local now = os.clock()
+		local boosting = S.boosting
+		local turn = (inp.left and 1 or 0) - (inp.right and 1 or 0)
+		local climb = (inp.up and 1 or 0) - (inp.down and 1 or 0)
+
+		local f = 0
+		local md = hum.MoveDirection
+		if md.Magnitude > 0 then
+			local cl = cam.CFrame.LookVector
+			local fl = Vector3.new(cl.X, 0, cl.Z)
+			if fl.Magnitude > 0 then f = md:Dot(fl.Unit) end
+		end
+
+		if S.wantTakeoff and S.mode == "ground" then
+			S.mode = "air"
+			grace = 2
+			noseT = 3.2
+			speed = math.max(speed, 35)
+			pitch = math.max(pitch, 0.25)
+			J.takeoffBtn.Visible = false
+			J.setLandFx(jet, false)
+			task.delay(0.8, function()
+				if S.jet and S.mode == "air" then J.setWheels(S.jet, false) end
+			end)
+		end
+		S.wantTakeoff = false
+
+		if S.mode == "ground" then
+			local throttle = math.clamp(climb + f, -1, 1)
+			local maxF = GROUND_MAX * (boosting and 1.8 or 1)
+			local tgt = (throttle > 0) and (throttle * maxF) or (throttle * GROUND_REV)
+			speed = speed + (tgt - speed) * math.clamp(dt * 1.2, 0, 1)
+			local steer = (0.3 + 0.7 * math.clamp(math.abs(speed) / 6, 0, 1)) * ((speed >= 0) and 1 or -1)
+			yaw = yaw + turn * 1.5 * dt * steer
+
+			local fwdV = Vector3.new(-math.sin(yaw), 0, -math.cos(yaw))
+			pos = pos + fwdV * speed * dt
+
+			local gC = groundY(pos)
+			if gC then
+				local desY = gC + GROUND_H
+				pos = Vector3.new(pos.X, pos.Y + (desY - pos.Y) * math.clamp(dt * 10, 0, 1), pos.Z)
+			end
+			local gF, gR = groundY(pos + fwdV * 5), groundY(pos - fwdV * 5)
+			local tp = 0
+			if gF and gR then tp = math.clamp(math.atan2(gF - gR, 10), -0.6, 0.6) end
+			pitch = pitch + (tp - pitch) * math.clamp(dt * 6, 0, 1)
+			roll = roll + (0 - roll) * math.clamp(dt * 6, 0, 1)
+
+			rollT = rollT - dt
+			J.setFire(jet, 10 + math.abs(speed) * 0.6 + (boosting and 90 or 0), boosting)
+			J.setNoseFx(jet, now < S.laserUntil)
+			J.setTurnFx(jet, false)
+			J.setLandFx(jet, rollT > 0)
+		else
+			grace = grace - dt
+			noseT = noseT - dt
+			local tgt = AIR_SPEED * (boosting and 2.5 or 1) + f * 40
+			speed = speed + (tgt - speed) * math.clamp(dt * 0.5, 0, 1)
+			yaw = yaw + turn * 1.3 * dt
+			pitch = pitch + climb * 1.0 * dt
+			if climb == 0 then pitch = pitch * (1 - math.clamp(dt * 1.2, 0, 1)) end
+			if grace > 0 then pitch = math.max(pitch, 0.2) end
+			pitch = math.clamp(pitch, -1.2, 1.2)
+			roll = roll + (turn * 0.8 - roll) * math.clamp(dt * 5, 0, 1)
+
+			J.setFire(jet, boosting and 260 or 80, boosting)
+			J.setNoseFx(jet, noseT > 0 or now < S.laserUntil)
+			J.setTurnFx(jet, math.abs(roll) > 0.25)
+		end
+		S.speed = speed
+
+		-- กลิ้งตัว (สกิล)
+		local spin = 0
+		if S.rolling then
+			local p = (now - S.rollStart) / 0.9
+			if p >= 1 then
+				S.rolling = false
+			else
+				spin = (p * p * (3 - 2 * p)) * math.pi * 2
+			end
+		end
+
+		local rot = CFrame.Angles(0, yaw, 0) * CFrame.Angles(pitch, 0, 0) * CFrame.Angles(0, 0, roll + spin)
+
+		if S.mode == "air" then
+			pos = pos + rot.LookVector * speed * dt
+			local gy = groundY(pos)
+			local height = gy and (pos.Y - gy) or math.huge
+			local descending = rot.LookVector.Y < -0.03
+			J.setLandFx(jet, grace <= 0 and descending and height < 40)
+			if grace <= 0 and gy and height <= GROUND_H + 0.2 then
+				pos = Vector3.new(pos.X, gy + GROUND_H, pos.Z)
+				S.mode = "ground"
+				S.rolling = false
+				rollT = 2.5
+				J.setWheels(jet, true)
+				J.landBurst(jet)
+				J.addShake(0.4)
+				J.takeoffBtn.Visible = true
+			end
+		end
+
+		-- โล่ + ซ่อนตัว + ควันสี + ไอน้ำปลายปีก
+		J.setShield(jet, now < S.shieldUntil)
+		local wantCloak = now < S.cloakUntil
+		if wantCloak ~= S.cloakOn then
+			S.cloakOn = wantCloak
+			J.setCloak(jet, wantCloak)
+		end
+		local wantRb = now < S.rainbowUntil
+		if wantRb ~= S.rainbowOn then
+			S.rainbowOn = wantRb
+			J.setRainbow(jet, wantRb)
+		end
+		J.setVapor(jet, S.mode == "air" and (boosting or S.rolling or math.abs(roll) > 0.35))
+
+		local cf = CFrame.new(pos) * rot
+		jet:PivotTo(cf)
+		hrp.CFrame = cf * CFrame.new(0, 1.0, -5)
+		hrp.AssemblyLinearVelocity = Vector3.zero
+
+		-- กล้อง: ล็อกอยู่หลังเครื่อง
+		local aim = CFrame.Angles(0, yaw, 0) * CFrame.Angles(pitch * 0.8, 0, 0)
+		local camPos = (CFrame.new(pos) * aim * CFrame.new(0, 0, CAM_DIST)).Position + Vector3.new(0, CAM_UP, 0)
+		local lead = aim.LookVector * 14
+		local want = CFrame.lookAt(camPos, pos + Vector3.new(0, 2, 0) + lead) * CFrame.Angles(0, 0, roll * 0.3)
+		local base = cam.CFrame:Lerp(want, math.clamp(dt * 12, 0, 1))
+		local sh = S.shake
+		if sh > 0.01 then
+			base = base * CFrame.new((math.random() - 0.5) * sh, (math.random() - 0.5) * sh, 0)
+			S.shake = math.max(0, sh - dt * 2.2)
+		else
+			S.shake = 0
+		end
+		cam.CFrame = base
+		cam.Focus = CFrame.new(pos)
+		local wantFov = 70 + (boosting and 16 or 0) + ((S.mode == "air") and math.abs(turn) * 3 or 0)
+		cam.FieldOfView = cam.FieldOfView + (wantFov - cam.FieldOfView) * math.clamp(dt * 4, 0, 1)
+	end)
+end)
+
+-- ===== ปุ่มบินขึ้น =====
+J.takeoffBtn.MouseButton1Click:Connect(function()
+	if S.riding and S.mode == "ground" then S.wantTakeoff = true end
+end)
+
+-- ===== ลงจากเครื่อง =====
+J.landBtn.MouseButton1Click:Connect(function()
+	if not S.riding then return end
+	local c = lp.Character
+	local hrp = c and c:FindFirstChild("HumanoidRootPart")
+	local pos = S.jet and S.jet.PrimaryPart and S.jet.PrimaryPart.Position
+	cleanup()
+	if hrp and pos then hrp.CFrame = CFrame.new(pos + Vector3.new(0, 5, 0)) end
+end)
+
+if env.NEXORA_JET_CharConn then env.NEXORA_JET_CharConn:Disconnect() end
+env.NEXORA_JET_CharConn = lp.CharacterAdded:Connect(cleanup)
+
+J.flightReady = true
+print("[NEXORA] ไฟล์ 4/5 พร้อมแล้ว → รันไฟล์ 5")
+-- NEXORA | เจ็ตขับไล่ V3 — ไฟล์ 5/5 (สกิลทั้งหมด 12 ปุ่ม + คูลดาวน์)
+local Players = game:GetService("Players")
+local RS = game:GetService("RunService")
+local lp = Players.LocalPlayer
+
+local env = (getgenv and getgenv()) or _G
+local J = env.NEXORA_JET
+if not (J and J.flightReady) then warn("[NEXORA] ต้องรันไฟล์ 1-4 ก่อน") return end
+
+local S, mf = J.S, J.mf
+
+local function track(c) table.insert(J.conns, c) return c end
+
+local skillDefs = {}
+
+-- รีเซ็ตคูลดาวน์ตอนลงจากเครื่อง
+table.insert(J.cleanupHooks, function()
+	for _, d in ipairs(skillDefs) do d.activeUntil, d.cdUntil = 0, 0 end
+end)
+
+-- ===== ยิงมิสไซล์ (สลับซ้าย/ขวาใต้ปีก) =====
+local podIdx = 1
+local pods = {Vector3.new(4.5, -0.95, 1.1), Vector3.new(-4.5, -0.95, 1.1)}
+
+local function fireMissile()
+	local jet = S.jet
+	if not (S.riding and jet and jet.PrimaryPart) then return end
+	podIdx = 3 - podIdx
+
+	local launchCF = jet.PrimaryPart.CFrame * CFrame.new(pods[podIdx])
+	J.muzzleFlash(launchCF.Position)
+	local mm = J.newMissile(launchCF)
+	local life = 0
+	local conn
+	conn = RS.Heartbeat:Connect(function(dt)
+		if not mm.Parent then conn:Disconnect() return end
+		life = life + dt
+		local spd = math.min(320, 140 + life * 500)
+		local cf0 = mm.PrimaryPart.CFrame
+		local stepLen = spd * dt
+
+		local ex = {mf}
+		if S.jet then table.insert(ex, S.jet) end
+		if lp.Character then table.insert(ex, lp.Character) end
+		local rp = RaycastParams.new()
+		rp.FilterType = Enum.RaycastFilterType.Exclude
+		rp.FilterDescendantsInstances = ex
+		rp.IgnoreWater = true
+
+		local hit = workspace:Raycast(cf0.Position, cf0.LookVector * (stepLen + 2), rp)
+		if hit then
+			conn:Disconnect()
+			J.explode(hit.Position)
+			mm:Destroy()
+			return
+		end
+		mm:PivotTo(cf0 + cf0.LookVector * stepLen)
+		if life >= 3 then
+			conn:Disconnect()
+			J.explode(cf0.Position)
+			mm:Destroy()
+		end
+	end)
+end
+
+-- ===== ระบบสกิล =====
+local function reg(btn, label, cd, fn)
+	local d = {btn = btn, label = label, cd = cd, activeUntil = 0, cdUntil = 0}
+	table.insert(skillDefs, d)
+	btn.MouseButton1Click:Connect(function()
+		if not S.riding then return end
+		local n = os.clock()
+		if n < d.cdUntil then return end
+		d.cdUntil = n + cd
+		if fn(d, n) == false then d.cdUntil = 0 end
+	end)
+end
+
+local function hasJet()
+	return S.jet and S.jet.PrimaryPart
+end
+
+-- 1) ยิงมิสไซล์
+reg(J.missileBtn, "ยิงมิสไซล์", 0.45, function()
+	if not hasJet() then return false end
+	fireMissile()
+end)
+
+-- 2) ยิงรัว
+reg(J.salvoBtn, "ยิงรัว", 6, function(d, n)
+	if not hasJet() then return false end
+	d.activeUntil = n + 0.6
+	task.spawn(function()
+		for _ = 1, 6 do
+			if not (S.riding and S.jet) then break end
+			fireMissile()
+			task.wait(0.1)
+		end
+	end)
+end)
+
+-- 3) เร่งความเร็ว (+วงคลื่นเสียง)
+reg(J.boostBtn, "เร่งความเร็ว", 6, function(d, n)
+	S.boosting = true
+	d.activeUntil = n + 3
+	if hasJet() then
+		J.boostRing(S.jet.PrimaryPart.CFrame * CFrame.new(0, 0, 7))
+		J.addShake(0.5)
+	end
+	task.delay(3, function() S.boosting = false end)
+end)
+
+-- 4) โล่
+reg(J.shieldBtn, "โล่", 12, function(d, n)
+	S.shieldUntil = n + 6
+	d.activeUntil = n + 6
+end)
+
+-- 5) กลิ้งตัว (เฉพาะตอนบิน)
+reg(J.rollBtn, "กลิ้งตัว", 3, function(d, n)
+	if S.mode ~= "air" or S.rolling then return false end
+	S.rolling = true
+	S.rollStart = n
+	d.activeUntil = n + 0.9
+end)
+
+-- 6) คลื่นช็อก
+reg(J.novaBtn, "คลื่นช็อก", 10, function()
+	if not hasJet() then return false end
+	J.shockwave(S.jet.PrimaryPart.Position)
+end)
+
+-- 7) ซ่อนตัว
+reg(J.cloakBtn, "ซ่อนตัว", 10, function(d, n)
+	S.cloakUntil = n + 4
+	d.activeUntil = n + 4
+end)
+
+-- 8) เลเซอร์ลำแสง (ชาร์จที่หัวเครื่อง ยิง 1.6 วิ)
+reg(J.laserBtn, "เลเซอร์", 14, function(d, n)
+	if not hasJet() then return false end
+	local dur = 1.6
+	d.activeUntil = n + dur
+	S.laserUntil = n + dur
+	J.fireLaser(function()
+		local j = S.jet
+		if S.riding and j and j.PrimaryPart then
+			return j.PrimaryPart.CFrame * CFrame.new(J.MUZZLE)
+		end
+		return nil
+	end, dur)
+end)
+
+-- 9) ทิ้งระเบิด (ตกลงพื้นแล้วระเบิดใหญ่)
+reg(J.bombBtn, "ทิ้งระเบิด", 5, function()
+	if not hasJet() then return false end
+	local cf = S.jet.PrimaryPart.CFrame * CFrame.new(0, -2.4, 1)
+	J.dropBomb(cf, cf.LookVector * math.max(S.speed, 20))
+end)
+
+-- 10) แฟลร์ล่อขีปนาวุธ
+reg(J.flareBtn, "แฟลร์", 8, function(d, n)
+	if not hasJet() then return false end
+	local cf = S.jet.PrimaryPart.CFrame
+	J.dropFlares(cf * CFrame.new(0, -0.5, 10), cf.LookVector * S.speed)
+	d.activeUntil = n + 0.6
+end)
+
+-- 11) ควันสีรุ้งปลายปีก 8 วิ
+reg(J.rainbowBtn, "ควันสี", 15, function(d, n)
+	S.rainbowUntil = n + 8
+	d.activeUntil = n + 8
+end)
+
+-- อัปเดตข้อความ/ความจางของปุ่มสกิล
+track(RS.RenderStepped:Connect(function()
+	local t = os.clock()
+	for _, d in ipairs(skillDefs) do
+		local txt, tr = d.label, 0
+		if t < d.activeUntil then
+			txt = d.label .. " ●"
+		elseif t < d.cdUntil then
+			tr = 0.55
+			if d.cd >= 3 then txt = d.label .. " " .. math.ceil(d.cdUntil - t) end
+		end
+		if d.btn.Text ~= txt then d.btn.Text = txt end
+		if d.btn.TextTransparency ~= tr then d.btn.TextTransparency = tr end
+	end
+end))
+
+print("[NEXORA] ไฟล์ 5/5 พร้อมแล้ว — เล่นได้เลย")
